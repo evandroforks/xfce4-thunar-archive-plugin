@@ -62,7 +62,6 @@ static void   tap_provider_execute              (TapProvider              *tap_p
 static void   tap_provider_child_watch          (GPid                      pid,
                                                  gint                      status,
                                                  gpointer                  user_data);
-static void   tap_provider_child_watch_destroy  (gpointer                  user_data);
 
 
 
@@ -81,13 +80,6 @@ struct _TapProvider
    */
   GtkIconFactory *icon_factory;
 #endif
-
-  /* child watch support for the last spawn command, which allowed us to refresh 
-   * the folder contents after the command had terminated with ThunarVFS (i.e. 
-   * when the archive had been created). This no longer works with GIO but 
-   * we still use the watch to close the PID properly.
-   */
-  gint            child_watch_id;
 };
 
 
@@ -99,31 +91,42 @@ static const gchar TAP_MIME_TYPES[][34] = {
   "application/x-arj",
   "application/x-bzip",
   "application/x-bzip-compressed-tar",
+  "application/x-bzip2",
+  "application/x-bzip2-compressed-tar",
+  "application/x-bzip3",
+  "application/x-bzip3-compressed-tar",
+  "application/x-cd-image",
   "application/x-compress",
   "application/x-compressed-tar",
   "application/x-deb",
   "application/x-gtar",
   "application/x-gzip",
+  "application/x-jar",
+  "application/x-java-archive",
   "application/x-lha",
   "application/x-lhz",
+  "application/x-lrzip",
+  "application/x-lrzip-compressed-tar",
+  "application/x-lz4",
+  "application/x-lz4-compressed-tar",
+  "application/x-lzip",
+  "application/x-lzip-compressed-tar",
   "application/x-lzma",
   "application/x-lzma-compressed-tar",
+  "application/x-lzop",
   "application/x-rar",
   "application/x-rar-compressed",
+  "application/x-rpm",
   "application/x-tar",
   "application/x-xz",
   "application/x-xz-compressed-tar",
   "application/x-zip",
   "application/x-zip-compressed",
-  "application/zip",
-  "multipart/x-zip",
-  "application/x-rpm",
-  "application/x-jar",
-  "application/x-java-archive",
-  "application/x-lzop",
   "application/x-zoo",
-  "application/x-cd-image",
-  "application/x-7z-compressed",
+  "application/x-zstd-compressed-tar",
+  "application/zip",
+  "application/zstd",
+  "multipart/x-zip",
 };
 
 static GQuark tap_item_files_quark;
@@ -571,8 +574,7 @@ tap_provider_execute (TapProvider *tap_provider,
   if (G_LIKELY (pid >= 0))
     {
       /* schedule the new child watch */
-      tap_provider->child_watch_id = g_child_watch_add_full (G_PRIORITY_LOW, pid, tap_provider_child_watch,
-                                                             tap_provider, tap_provider_child_watch_destroy);
+      g_child_watch_add_full (G_PRIORITY_LOW, pid, tap_provider_child_watch, NULL, NULL);
     }
   else if (error != NULL)
     {
@@ -599,17 +601,6 @@ tap_provider_child_watch (GPid     pid,
 {
   /* need to cleanup */
   g_spawn_close_pid (pid);
-}
-
-
-
-static void
-tap_provider_child_watch_destroy (gpointer user_data)
-{
-  TapProvider *tap_provider = TAP_PROVIDER (user_data);
-
-  /* reset child watch id */
-  tap_provider->child_watch_id = 0;
 }
 
 
